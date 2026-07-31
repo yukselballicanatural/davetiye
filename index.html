@@ -357,5 +357,108 @@
       els.forEach(function (el) { io.observe(el); });
     })();
   </script>
+
+  <!-- Anı Defteri: seçilen dosyaları Google Apps Script köprüsü üzerinden Drive'a yükler -->
+  <script>
+    (function () {
+      // Apps Script deploy edildikten sonra "Web app URL"i buraya yapıştır.
+      var WEB_APP_URL = 'PASTE_APPS_SCRIPT_WEB_APP_URL_HERE';
+
+      var dz = document.getElementById('dz');
+      var input = document.getElementById('file-input');
+      var pickBtn = document.getElementById('pick');
+      var filesEl = document.getElementById('files');
+      var statusEl = document.getElementById('status');
+      var uploaderInput = document.getElementById('uploader');
+      if (!dz || !input || !pickBtn || !filesEl || !statusEl) return;
+
+      function fileToBase64(file) {
+        return new Promise(function (resolve, reject) {
+          var reader = new FileReader();
+          reader.onload = function () { resolve(String(reader.result).split(',')[1]); };
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+      }
+
+      function uploadFile(file, card, bar) {
+        return fileToBase64(file).then(function (base64) {
+          bar.style.width = '55%';
+          return fetch(WEB_APP_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({
+              filename: file.name,
+              mimeType: file.type || 'application/octet-stream',
+              data: base64,
+              uploader: (uploaderInput && uploaderInput.value.trim()) || ''
+            })
+          });
+        }).then(function (res) { return res.json(); })
+          .then(function (json) {
+            if (!json.ok) throw new Error(json.error || 'Yükleme başarısız');
+            bar.style.width = '100%';
+            card.classList.add('ok');
+          }).catch(function (err) {
+            card.classList.add('err');
+            console.error(err);
+          });
+      }
+
+      function handleFiles(fileList) {
+        if (!WEB_APP_URL || WEB_APP_URL.indexOf('PASTE_') === 0) {
+          statusEl.textContent = 'Yükleme adresi henüz ayarlanmadı — Apps Script deploy edilip URL eklenmeli.';
+          return;
+        }
+        var files = Array.prototype.slice.call(fileList || []);
+        if (!files.length) return;
+
+        statusEl.textContent = files.length + ' dosya yükleniyor…';
+        var done = 0;
+
+        files.forEach(function (file) {
+          var card = document.createElement('div');
+          card.className = 'file';
+
+          if (file.type.indexOf('image/') === 0) {
+            var img = document.createElement('img');
+            img.src = URL.createObjectURL(file);
+            card.appendChild(img);
+          } else {
+            var badge = document.createElement('div');
+            badge.className = 'badge';
+            badge.textContent = file.name;
+            card.appendChild(badge);
+          }
+
+          var bar = document.createElement('div');
+          bar.className = 'bar';
+          bar.style.width = '8%';
+          card.appendChild(bar);
+          filesEl.appendChild(card);
+
+          uploadFile(file, card, bar).then(function () {
+            done++;
+            if (done === files.length) statusEl.textContent = 'Tüm dosyalar yüklendi. Teşekkürler! 💛';
+          });
+        });
+
+        input.value = '';
+      }
+
+      pickBtn.addEventListener('click', function () { input.click(); });
+      input.addEventListener('change', function () { handleFiles(input.files); });
+
+      ['dragover', 'dragenter'].forEach(function (ev) {
+        dz.addEventListener(ev, function (e) { e.preventDefault(); dz.classList.add('drag'); });
+      });
+      ['dragleave', 'drop'].forEach(function (ev) {
+        dz.addEventListener(ev, function (e) { e.preventDefault(); dz.classList.remove('drag'); });
+      });
+      dz.addEventListener('drop', function (e) {
+        if (e.dataTransfer && e.dataTransfer.files) handleFiles(e.dataTransfer.files);
+      });
+    })();
+  </script>
 </body>
 </html>
